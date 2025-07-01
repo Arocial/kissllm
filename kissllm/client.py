@@ -14,8 +14,9 @@ logger = logging.getLogger(__name__)
 
 
 class DefaultResponseHandler:
-    def __init__(self, messages):
+    def __init__(self, messages, use_flexible_toolcall=True):
         self.messages = messages
+        self.use_flexible_toolcall = use_flexible_toolcall
 
     async def accumulate_response(self, response):
         if isinstance(response, CompletionStream):
@@ -34,16 +35,23 @@ class DefaultResponseHandler:
             )
             return messages, False
         else:
+            if self.use_flexible_toolcall:
+                messages.append(
+                    {
+                        "role": "assistant",
+                        "content": response.choices[0].message.content or "",
+                    }
+                )
+            else:
+                messages.append(
+                    {
+                        "role": "assistant",
+                        "content": response.choices[0].message.content or "",
+                        "tool_calls": response.get_tool_calls(),
+                    }
+                )
+
             tool_results = await response.get_tool_results()
-
-            messages.append(
-                {
-                    "role": "assistant",
-                    "content": response.choices[0].message.content or "",
-                    "tool_calls": response.get_tool_calls(),
-                }
-            )
-
             for result in tool_results:
                 messages.append(result)
             return messages, True
@@ -114,29 +122,25 @@ class LLMClient:
         tools_sys = (
             "\n# Tool Use\n"
             "You can call external tools to help complete tasks.\n"
-
             "\n## Important Notes:\n"
             "- You can only get tool results in the NEXT message, NOT immediately\n"
             "- NEVER generate or simulate tool results yourself\n"
-
             "\n## Tool Calling Flow:\n"
             "1. You output <tool_call> requests in your reply.\n"
             "2. The system executes the tool and returns the result in the NEXT message.\n"
             "3. You process the tool results in the next round.\n"
-
             "\n## Tool Calling Format:\n"
             "To call a tool:\n"
-            "1. Use JSON inside <tool_call> tags\n"
-            "2. Generate a unique ID for each call\n"
-            "3. Follow the exact schema and provide all required parameters\n"
-            "4. Each <tool_call> must start on a new line\n\n"
+            "1. Use json inside <tool_call> tags. **Make sure the json is valid.**\n"
+            "2. Generate a unique ID for each call.\n"
+            "3. Follow the exact schema and provide all required parameters.\n"
+            "4. Each <tool_call> must start on a new line.\n\n"
             "Example:\n\n"
             '<tool_call>{"id": "tool_call_00001", "name": "demo_func_name", "arguments": {"demo_arg": "demo_value"}}</tool_call>\n'
-
             "\n## Tool Calling Rules:\n"
-            "1. Understand the user's request before calling any tools\n"
-            "2. If no tool is needed, respond naturally\n"
-            "3. You may make multiple tool calls if necessary\n"
+            "1. Understand the user's request before calling any tools.\n"
+            "2. If no tool is needed, respond naturally.\n"
+            "3. You may make multiple tool calls if necessary.\n"
         )
 
         tools_user = "\n## Available Tool Specifications:\n" + "\n".join(
@@ -228,7 +232,7 @@ class LLMClient:
         """Execute LLM completion with automatic tool execution until no more tool calls"""
         step = 0
         if handle_response is None:
-            handle_response = DefaultResponseHandler(messages)
+            handle_response = DefaultResponseHandler(messages, use_flexible_toolcall)
 
         while step < max_steps:
             step += 1

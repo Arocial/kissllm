@@ -272,8 +272,10 @@ class ToolMixin:
                         },
                     }
                 )
-            except json.JSONDecodeError:
-                logger.warning(f"Failed to parse simulated tool call JSON: {match}")
+            except json.JSONDecodeError as e:
+                logger.warning(
+                    f"Failed to parse simulated tool call JSON: {match}\nError: {e}"
+                )
 
         return tool_calls
 
@@ -289,13 +291,14 @@ class ToolMixin:
         if not tool_calls:
             return []
 
+        role = "user" if self.use_flexible_toolcall else "tool"
         for tool_call in tool_calls:
             try:
                 result = await self.tool_registry.execute_tool_call(tool_call)
                 tool_results.append(
                     {
                         "tool_call_id": tool_call["id"],
-                        "role": "tool",
+                        "role": role,
                         "content": str(result),
                     }
                 )
@@ -303,7 +306,7 @@ class ToolMixin:
                 tool_results.append(
                     {
                         "tool_call_id": tool_call["id"],
-                        "role": "tool",
+                        "role": role,
                         "content": f"Error executing tool: {str(e)}",
                     }
                 )
