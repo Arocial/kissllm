@@ -42,6 +42,11 @@ class CompletionStream:
             elif chunk.choices[0].delta.role:
                 self._role_defined = True
 
+            # workaround: openrouter/gemini-2.5-pro have resoning_details as list,
+            # but without `index` key, which makes openai sdk unhappy.
+            if hasattr(chunk.choices[0].delta, "reasoning_details"):
+                chunk.choices[0].delta.reasoning_details = None
+
             self._state.handle_chunk(chunk)
             return chunk
 
