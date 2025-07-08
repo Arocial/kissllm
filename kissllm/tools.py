@@ -253,6 +253,15 @@ class ToolMixin:
         content = self.choices[0].message.content or ""
         tool_calls = []
 
+        # First parse all raw tool arguments
+        raw_args = {}
+        raw_pattern = (
+            r"^\s*<raw_tool_argument_(\d+)>\s*([\s\S]*?)\s*</raw_tool_argument_\1>\s*$"
+        )
+        for match in re.finditer(raw_pattern, content, re.DOTALL | re.MULTILINE):
+            arg_id, arg_value = match.groups()
+            raw_args[f"ref:raw_tool_argument_{arg_id}"] = arg_value.strip()
+
         # Parse tool calls from content using <tool_call> tags
         pattern = r"^\s*<tool_call>\s*(\{.*?\})\s*</tool_call>\s*$"
         matches = re.findall(pattern, content, re.DOTALL | re.MULTILINE)
@@ -260,15 +269,21 @@ class ToolMixin:
         for i, match in enumerate(matches):
             try:
                 tool_call_data = json.loads(match.strip())
+
+                # Process arguments to replace any raw references
+                arguments = tool_call_data.get("arguments", {})
+                if isinstance(arguments, dict):
+                    for k, v in arguments.items():
+                        if isinstance(v, str) and v in raw_args:
+                            arguments[k] = raw_args[v]
+
                 tool_calls.append(
                     {
                         "id": tool_call_data.get("id"),
                         "type": "function",
                         "function": {
                             "name": tool_call_data.get("name"),
-                            "arguments": json.dumps(
-                                tool_call_data.get("arguments", {})
-                            ),
+                            "arguments": json.dumps(arguments),
                         },
                     }
                 )

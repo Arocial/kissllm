@@ -133,16 +133,23 @@ You can call external tools to help complete tasks.
 3. You process the tool results in the next round.
 
 ## Tool Calling Format:
-1. Use json inside <tool_call> tags. **Make sure the json is valid. All string values must be properly escaped.**
+1. Use JSON inside <tool_call> tags. **Make sure the json is valid. All string values must be properly escaped.**
 2. Generate a unique ID for each call.
 3. Follow the exact schema and provide all required parameters.
 4. Each <tool_call> must start on a new line.
+5. For long string, you can use `ref:raw_tool_argument_<index>` to reference raw text in message.
+For example:
 
-Example:
+<tool_call>{"id": "tool_call_00001", "name": "demo_func_name", "arguments": {"demo_arg": "multiline\ndemo_value\nwith \"quotes\""}}</tool_call>
 
-<tool_call>{"id": "tool_call_00001", "name": "demo_func_name", "arguments": {"demo_arg": "multiline
-demo_value
-with "quotes""}}</tool_call>
+is the same with:
+
+<tool_call>{"id": "tool_call_00001", "name": "demo_func_name", "arguments": {"demo_arg": "ref:raw_tool_argument_1"}}</tool_call>
+<raw_tool_argument_1>
+multiline
+demo value
+with "quotes"
+</raw_tool_argument_1>
 
 ## Tool Calling Rules:
 1. Understand the user's request before calling any tools.
