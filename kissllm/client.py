@@ -119,46 +119,51 @@ class LLMClient:
         if not tools:
             return messages
 
-        tools_sys = (
-            "\n# Tool Use\n"
-            "You can call external tools to help complete tasks.\n"
-            "\n## Important Notes:\n"
-            "- You can only get tool results in the NEXT message, NOT immediately\n"
-            "- NEVER generate or simulate tool results yourself\n"
-            "\n## Tool Calling Flow:\n"
-            "1. You output <tool_call> requests in your reply.\n"
-            "2. The system executes the tool and returns the result in the NEXT message.\n"
-            "3. You process the tool results in the next round.\n"
-            "\n## Tool Calling Format:\n"
-            "To call a tool:\n"
-            "1. Use json inside <tool_call> tags. **Make sure the json is valid.**\n"
-            "2. Generate a unique ID for each call.\n"
-            "3. Follow the exact schema and provide all required parameters.\n"
-            "4. Each <tool_call> must start on a new line.\n\n"
-            "Example:\n\n"
-            '<tool_call>{"id": "tool_call_00001", "name": "demo_func_name", "arguments": {"demo_arg": "demo_value"}}</tool_call>\n'
-            "\n## Tool Calling Rules:\n"
-            "1. Understand the user's request before calling any tools.\n"
-            "2. If no tool is needed, respond naturally.\n"
-            "3. You may make multiple tool calls if necessary.\n"
-        )
+        tools_sys = """
+# Tool Use
+You can call external tools to help complete tasks.
+
+## Important Notes:
+- You can only get tool results in the NEXT message, NOT immediately.
+- NEVER generate or simulate tool results yourself.
+
+## Tool Calling Flow:
+1. You output <tool_call> requests in your reply.
+2. The system executes the tool and returns the result in the NEXT message.
+3. You process the tool results in the next round.
+
+## Tool Calling Format:
+1. Use json inside <tool_call> tags. **Make sure the json is valid. All string values must be properly escaped.**
+2. Generate a unique ID for each call.
+3. Follow the exact schema and provide all required parameters.
+4. Each <tool_call> must start on a new line.
+
+Example:
+
+<tool_call>{"id": "tool_call_00001", "name": "demo_func_name", "arguments": {"demo_arg": "multiline
+demo_value
+with "quotes""}}</tool_call>
+
+## Tool Calling Rules:
+1. Understand the user's request before calling any tools.
+2. If no tool is needed, respond naturally.
+3. You may make multiple tool calls if necessary.
+"""
 
         tools_user = "\n## Available Tool Specifications:\n" + "\n".join(
             [json.dumps(t) for t in tools]
         )
 
+        tools_msg = tools_sys + tools_user
+
         new_messages = messages.copy()
         for i, msg in enumerate(new_messages):
             if msg["role"] == "system":
-                new_sys = msg.copy()
-                new_sys["content"] = new_sys["content"] + "\n\n" + tools_sys
-                new_messages[i] = new_sys
+                new_messages.insert(i + 1, {"role": "user", "content": tools_msg})
                 break
         else:
-            # If no user message found, append tools text
-            new_messages.append({"role": "system", "content": tools_sys})
-
-        new_messages.append({"role": "user", "content": tools_user})
+            # If no system message found, insert tools text
+            new_messages.insert(0, {"role": "user", "content": tools_msg})
 
         return new_messages
 
@@ -189,11 +194,13 @@ class LLMClient:
         # Handle simulated tools mode
         if use_flexible_toolcall:
             # Inject tools into messages instead of using native tool calling
-            final_messages = self._inject_tools_into_messages(messages, tools)
+            messages = self._inject_tools_into_messages(messages, tools)
             tools = None
             tool_choice = None
-        else:
-            final_messages = messages
+
+        final_messages = [msg.copy() for msg in messages]
+        for msg in final_messages:
+            msg.pop("local_metadata", None)
 
         logging_prompt(logger, "===Raw Prompt Messages:===", final_messages)
         res = await self.provider_driver.async_completion(
