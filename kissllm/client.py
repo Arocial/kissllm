@@ -1,3 +1,4 @@
+import inspect
 import json
 import logging
 from typing import Any, Dict, List, Optional, Union
@@ -158,7 +159,7 @@ with "quotes"
 """
 
         tools_user = "\n## Available Tool Specifications:\n" + "\n".join(
-            [json.dumps(t) for t in tools]
+            [self._generate_tool_text(t) for t in tools]
         )
 
         tools_msg = tools_sys + tools_user
@@ -173,6 +174,23 @@ with "quotes"
             new_messages.insert(0, {"role": "user", "content": tools_msg})
 
         return new_messages
+
+    def _generate_tool_text(self, tool_spec) -> str:
+        func = tool_spec["function"]
+        name = func["name"]
+        description = func["description"]
+        params = func["parameters"]["properties"]
+        required = func["parameters"]["required"]
+        for k, v in params.items():
+            if k in required:
+                v["required"] = True
+        tool_text = f"""
+### {name}
+Params: {json.dumps(params)}
+Description:
+{description}
+        """
+        return tool_text
 
     @observe
     async def async_completion(
