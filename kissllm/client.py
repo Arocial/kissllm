@@ -1,4 +1,3 @@
-import inspect
 import json
 import logging
 from typing import Any, Dict, List, Optional, Union
@@ -14,40 +13,83 @@ from kissllm.utils import logging_prompt
 logger = logging.getLogger(__name__)
 
 
-class DefaultResponseHandler:
-    def __init__(self, messages, use_flexible_toolcall=True):
-        self.messages = messages
+class State:
+    def __init__(
+        self,
+        use_flexible_toolcall=True,
+        tool_registry=None,
+    ):
+        self._messages: List[Dict[str, Any]] = []
         self.use_flexible_toolcall = use_flexible_toolcall
+        self.tool_registry = tool_registry
+
+        if self.tool_registry:
+            self.tool_specs = self.tool_registry.get_tools_specs() or None
+        else:
+            self.tool_specs = None
+
+        if not self.tool_specs:
+            self.tool_choice = None
+        else:
+            self.tool_choice = "auto"
+
+        self._last_message = None
+
+    def last_message(self):
+        return self._last_message
+
+    def get_messages(self):
+        final_messages = [msg.copy() for msg in self._messages]
+        for msg in final_messages:
+            msg.pop("local_metadata", None)
+        return final_messages
 
     async def accumulate_response(self, response):
         if isinstance(response, CompletionStream):
             response = await response.accumulate_stream()
         return response
 
-    async def __call__(self, response):
-        messages = self.messages
+    async def handle_response(self, raw_resp, stream):
+        messages = self._messages
+        should_cont = False
+        if not stream:
+            # Pass the client's tool registry to the response object
+            response = CompletionResponse(
+                raw_resp,
+                self.tool_registry,
+                use_flexible_toolcall=self.use_flexible_toolcall,
+            )
+        else:
+            # Pass the client's tool registry to the stream object
+            response = CompletionStream(
+                raw_resp,
+                self.tool_registry,
+                use_flexible_toolcall=self.use_flexible_toolcall,
+            )
         response = await self.accumulate_response(response)
+        content = response.choices[0].message.content or ""
+        self._last_message = content
         if not response.get_tool_calls():
             messages.append(
                 {
                     "role": "assistant",
-                    "content": response.choices[0].message.content or "",
+                    "content": content,
                 }
             )
-            return messages, False
+            should_cont = False
         else:
             if self.use_flexible_toolcall:
                 messages.append(
                     {
                         "role": "assistant",
-                        "content": response.choices[0].message.content or "",
+                        "content": content,
                     }
                 )
             else:
                 messages.append(
                     {
                         "role": "assistant",
-                        "content": response.choices[0].message.content or "",
+                        "content": content,
                         "tool_calls": response.get_tool_calls(),
                     }
                 )
@@ -55,71 +97,15 @@ class DefaultResponseHandler:
             tool_results = await response.get_tool_results()
             for result in tool_results:
                 messages.append(result)
-            return messages, True
+            should_cont = True
+        return should_cont
 
-
-class CompletionResponse(ToolMixin):
-    def __init__(
-        self,
-        response: Completion,
-        tool_registry: Optional[ToolManager],
-        use_flexible_toolcall=True,
-    ):
-        self.__dict__.update(response.__dict__)
-        ToolMixin.__init__(self, tool_registry, use_flexible_toolcall)
-
-
-class LLMClient:
-    """Unified LLM Client for multiple model providers"""
-
-    def __init__(
-        self,
-        provider: str | None = None,
-        provider_model: str | None = None,
-        api_key: str | None = None,
-        base_url: str | None = None,
-        tool_registry: Optional[ToolManager] = None,
-    ):
-        """
-        Initialize LLM client with specific provider.
-
-        Args:
-            provider: Provider name (e.g. "openai", "anthropic").
-            provider_model: Provider along with default model to use (e.g., "openai/gpt-4").
-            api_key: Provider API key.
-            base_url: Provider base URL.
-            tool_registry: An optional ToolRegistry instance. If None, a new one is created.
-        """
-        self.default_model = None
-        if provider_model:
-            self.provider, self.default_model = provider_model.split("/", 1)
-        if provider:
-            self.provider = provider
-        if self.provider is None:
-            raise ValueError(
-                "Provider must be specified either through provider or provider_model parameter"
-            )
-        self.provider_driver = get_provider_driver(self.provider)(
-            self.provider, api_key=api_key, base_url=base_url
-        )
-        self.tool_registry = tool_registry
-
-    def get_model(self, model):
-        if model is None:
-            model = self.default_model
-        if model is None:
-            raise ValueError(
-                "Model must be specified either through model or provider_model parameter"
-            )
-        return model
-
-    def _inject_tools_into_messages(
-        self, messages: List[Dict[str, str]], tools: List[Dict[str, Any]] | None
-    ) -> List[Dict[str, str]]:
+    def inject_tools_into_messages(self) -> List[Dict[str, str]]:
         """Inject tools information into messages."""
-        if not tools:
-            return messages
+        if not self.tool_specs:
+            return self._messages
 
+        messages = self._messages
         tools_sys = """
 # Tool Use
 You can call external tools to help complete tasks.
@@ -159,7 +145,7 @@ with "quotes"
 """
 
         tools_user = "\n## Available Tool Specifications:\n" + "\n".join(
-            [self._generate_tool_text(t) for t in tools]
+            [self._generate_tool_text(t) for t in self.tool_specs]
         )
 
         tools_msg = tools_sys + tools_user
@@ -192,6 +178,59 @@ Description:
         """
         return tool_text
 
+
+class CompletionResponse(ToolMixin):
+    def __init__(
+        self,
+        response: Completion,
+        tool_registry: Optional[ToolManager],
+        use_flexible_toolcall=True,
+    ):
+        self.__dict__.update(response.__dict__)
+        ToolMixin.__init__(self, tool_registry, use_flexible_toolcall)
+
+
+class LLMClient:
+    """Unified LLM Client for multiple model providers"""
+
+    def __init__(
+        self,
+        provider: str | None = None,
+        provider_model: str | None = None,
+        api_key: str | None = None,
+        base_url: str | None = None,
+    ):
+        """
+        Initialize LLM client with specific provider.
+
+        Args:
+            provider: Provider name (e.g. "openai", "anthropic").
+            provider_model: Provider along with default model to use (e.g., "openai/gpt-4").
+            api_key: Provider API key.
+            base_url: Provider base URL.
+        """
+        self.default_model = None
+        if provider_model:
+            self.provider, self.default_model = provider_model.split("/", 1)
+        if provider:
+            self.provider = provider
+        if self.provider is None:
+            raise ValueError(
+                "Provider must be specified either through provider or provider_model parameter"
+            )
+        self.provider_driver = get_provider_driver(self.provider)(
+            self.provider, api_key=api_key, base_url=base_url
+        )
+
+    def get_model(self, model):
+        if model is None:
+            model = self.default_model
+        if model is None:
+            raise ValueError(
+                "Model must be specified either through model or provider_model parameter"
+            )
+        return model
+
     @observe
     async def async_completion(
         self,
@@ -202,26 +241,10 @@ Description:
         stream: Optional[bool] = False,
         tools: Optional[List[Dict[str, Any]]] | bool = None,
         tool_choice: Optional[Union[str, Dict[str, Any]]] = None,
-        use_flexible_toolcall: bool = True,
         **kwargs,
     ) -> Any:
         """Execute LLM completion with provider-specific implementation"""
         model = self.get_model(model)
-
-        # Use registered tools from the client's registry if tools parameter is True
-        if tools is True and self.tool_registry:
-            tools = self.tool_registry.get_tools_specs()
-
-        if not tools:
-            tools = None
-            tool_choice = None
-
-        # Handle simulated tools mode
-        if use_flexible_toolcall:
-            # Inject tools into messages instead of using native tool calling
-            messages = self._inject_tools_into_messages(messages, tools)
-            tools = None
-            tool_choice = None
 
         final_messages = [msg.copy() for msg in messages]
         for msg in final_messages:
@@ -238,47 +261,41 @@ Description:
             tool_choice=tool_choice,
             **kwargs,
         )
-        if not stream:
-            # Pass the client's tool registry to the response object
-            return CompletionResponse(
-                res, self.tool_registry, use_flexible_toolcall=use_flexible_toolcall
-            )
-        else:
-            # Pass the client's tool registry to the stream object
-            return CompletionStream(
-                res, self.tool_registry, use_flexible_toolcall=use_flexible_toolcall
-            )
+        return res
 
     async def async_completion_with_tool_execution(
         self,
-        messages: List[Dict[str, str]],
+        state: State,
         model: str | None = None,
         temperature: Optional[float] = None,
         max_tokens: Optional[int] = None,
         stream: Optional[bool] = False,
-        handle_response=None,
         max_steps=10,
-        use_flexible_toolcall: Optional[bool] = True,
         **kwargs,
     ):
         """Execute LLM completion with automatic tool execution until no more tool calls"""
+        # Use registered tools from the client's registry if tools parameter is True
         step = 0
-        if handle_response is None:
-            handle_response = DefaultResponseHandler(messages, use_flexible_toolcall)
+
+        if state.use_flexible_toolcall:
+            tools = None
+            tool_choice = None
+        else:
+            tools = state.tool_specs
+            tool_choice = state.tool_choice
 
         while step < max_steps:
             step += 1
             response = await self.async_completion(
-                messages=messages,
+                messages=state.get_messages(),
                 model=model,
                 temperature=temperature,
                 max_tokens=max_tokens,
                 stream=stream,
-                tools=True,
-                tool_choice="auto" if not use_flexible_toolcall else None,
-                use_flexible_toolcall=use_flexible_toolcall,
+                tools=tools,
+                tool_choice=tool_choice,
                 **kwargs,
             )
-            messages, continu = await handle_response(response)
+            continu = await state.handle_response(response, stream)
             if not continu:
                 break

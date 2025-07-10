@@ -12,6 +12,7 @@ from kissllm.client import LLMClient
 from kissllm.mcp import SSEMCPConfig, StdioMCPConfig
 from kissllm.mcp.manager import MCPManager
 from kissllm.tools import ToolManager
+from tests.functional.helpers import StateForTest
 
 load_dotenv()
 test_provider = os.environ.get(
@@ -168,7 +169,7 @@ def tool_registry():
 
 
 # Helper function to perform the core LLM interaction and assertions
-async def _perform_mcp_tool_test(client: LLMClient):
+async def _perform_mcp_tool_test(client: LLMClient, tool_registry):
     """Performs the LLM interaction part of the MCP tool test."""
     # Test with automatic tool execution
     messages = [
@@ -177,13 +178,14 @@ async def _perform_mcp_tool_test(client: LLMClient):
             "content": "What is 15 + 27 and 8 * 9?",
         }
     ]
+    state = StateForTest(messages=messages, tool_registry=tool_registry)
     await client.async_completion_with_tool_execution(
-        messages=messages,
+        state=state,
         stream=True,
     )
 
     # Print the final response content
-    content = messages[-1]["content"]
+    content = state.last_message()
     print(f"\nAnswer: {content}")
 
     # Basic check that the final response contains the calculated numbers
@@ -219,12 +221,10 @@ async def test_mcp_stdio_tools(mcp_server_path):
         assert f"{server_name}_multiply" in registered_tool_names
 
         # Initialize client with the ToolManager
-        client = LLMClient(
-            provider_model=f"{test_provider}/{test_model}", tool_registry=tool_manager
-        )
+        client = LLMClient(provider_model=f"{test_provider}/{test_model}")
 
         # Perform the actual LLM interaction test
-        await _perform_mcp_tool_test(client)
+        await _perform_mcp_tool_test(client, tool_manager)
 
     # No explicit unregister needed, handled by async with
 
@@ -256,12 +256,10 @@ async def test_mcp_aggregator_tools(mcp_aggregator_server):
         assert f"{aggregator_server_name}_backend_1_multiply" in registered_tool_names
 
         # Initialize client with the ToolManager
-        client = LLMClient(
-            provider_model=f"{test_provider}/{test_model}", tool_registry=tool_manager
-        )
+        client = LLMClient(provider_model=f"{test_provider}/{test_model}")
 
         # Perform the actual LLM interaction test
-        await _perform_mcp_tool_test(client)
+        await _perform_mcp_tool_test(client, tool_manager)
 
     # No explicit unregister needed
 
@@ -290,11 +288,9 @@ async def test_mcp_sse_tools(sse_mcp_server):
         assert f"{server_name}_multiply" in registered_tool_names
 
         # Initialize client with the ToolManager
-        client = LLMClient(
-            provider_model=f"{test_provider}/{test_model}", tool_registry=tool_manager
-        )
+        client = LLMClient(provider_model=f"{test_provider}/{test_model}")
 
         # Perform the actual LLM interaction test
-        await _perform_mcp_tool_test(client)
+        await _perform_mcp_tool_test(client, tool_manager)
 
     # No explicit unregister needed

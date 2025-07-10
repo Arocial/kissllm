@@ -19,7 +19,10 @@ class AccumulatedCompletionResponse(ToolMixin):
 
 class CompletionStream:
     def __init__(
-        self, chunks, tool_registry: Optional[ToolManager], use_flexible_toolcall=True
+        self,
+        chunks,
+        tool_registry: Optional[ToolManager] = None,
+        use_flexible_toolcall=True,
     ):
         self.chunks = chunks
         self._tool_registry = tool_registry

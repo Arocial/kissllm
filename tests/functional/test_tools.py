@@ -3,9 +3,9 @@ import os
 import pytest
 from dotenv import load_dotenv
 
-from kissllm.client import LLMClient
+from kissllm.client import CompletionResponse, LLMClient
 from kissllm.tools import LocalToolManager, ToolManager
-from tests.functional.helpers import ResponseHandlerForTest
+from tests.functional.helpers import StateForTest
 
 load_dotenv()
 test_provider = os.environ["TEST_PROVIDER"]
@@ -58,9 +58,7 @@ def tool_registry():
 async def test_tool_calls(tool_registry):
     """Test tool calls functionality"""
     # Pass the pre-configured registry to the client
-    client = LLMClient(
-        provider_model=f"{test_provider}/{test_model}", tool_registry=tool_registry
-    )
+    client = LLMClient(provider_model=f"{test_provider}/{test_model}")
 
     # Test with automatic tool execution
     messages = [
@@ -69,15 +67,15 @@ async def test_tool_calls(tool_registry):
             "content": "What's the weather in Tokyo and what is 15 * 7?",
         }
     ]
+    state = StateForTest(messages=messages)
     await client.async_completion_with_tool_execution(
-        messages=messages,
+        state=state,
         stream=True,
-        handle_response=ResponseHandlerForTest(messages),
     )
 
     # Print the final response content
     print("\nAnswer: ")
-    print(messages[-1]["content"])
+    print(state.last_message())
 
 
 @pytest.mark.asyncio
@@ -87,7 +85,7 @@ async def test_single_tool_call(tool_registry):
     # Although we specify tools manually here, the client needs the registry
     # if tool execution were needed later via get_tool_results.
     client = LLMClient(
-        provider_model=f"{test_provider}/{test_model}", tool_registry=tool_registry
+        provider_model=f"{test_provider}/{test_model}",
     )
 
     # Test with forcing a specific tool
@@ -108,7 +106,6 @@ async def test_single_tool_call(tool_registry):
             }
         ],
         tool_choice={"type": "function", "function": {"name": "calculate"}},
-        use_flexible_toolcall=False,
         stream=False,
     )
 
@@ -123,6 +120,9 @@ async def test_single_tool_call(tool_registry):
 
             # Execute the tool call using the registry associated with the response
             # (This demonstrates manual execution if needed, though response.get_tool_results() is preferred)
+            response = CompletionResponse(
+                response, tool_registry, use_flexible_toolcall=False
+            )
             tool_results = (
                 await response.get_tool_results()
             )  # This uses the registry implicitly
