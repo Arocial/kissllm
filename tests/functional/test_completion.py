@@ -4,6 +4,7 @@ import pytest
 from dotenv import load_dotenv
 
 from kissllm.client import LLMClient
+from kissllm.stream import CompletionStream
 
 load_dotenv()
 test_provider = os.environ["TEST_PROVIDER"]
@@ -32,11 +33,13 @@ async def test_completion_streaming():
     """Test provider streaming functionality"""
     # Test streaming completion
     cli = LLMClient(provider_model=f"{test_provider}/{test_model}")
-    stream = await cli.async_completion(
+    resp = await cli.async_completion(
         messages=[{"role": "user", "content": "Hello"}],
         temperature=0.5,
         stream=True,
     )
+
+    stream = CompletionStream(resp)
 
     async for c in stream.iter_content():
         print(c, end="", flush=True)
