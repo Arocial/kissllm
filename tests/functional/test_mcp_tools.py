@@ -179,7 +179,7 @@ async def _perform_mcp_tool_test(client: LLMClient, tool_registry):
         }
     ]
     state = StateForTest(messages=messages, tool_registry=tool_registry)
-    await client.async_completion_with_tool_execution(
+    await client.async_completion_multi_round(
         state=state,
         stream=True,
     )

@@ -263,7 +263,7 @@ class LLMClient:
         )
         return res
 
-    async def async_completion_with_tool_execution(
+    async def async_completion_multi_round(
         self,
         state: State,
         model: str | None = None,
