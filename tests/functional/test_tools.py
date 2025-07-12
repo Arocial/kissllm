@@ -68,7 +68,7 @@ async def test_tool_calls(tool_registry):
         }
     ]
     state = StateForTest(messages=messages)
-    await client.async_completion_with_tool_execution(
+    await client.async_completion_multi_round(
         state=state,
         stream=True,
     )

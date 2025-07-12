@@ -1,5 +1,3 @@
-from typing import Any, Dict, List, Optional, Union
-
 from kissllm.client import State
 from kissllm.stream import CompletionStream
 
@@ -10,10 +8,8 @@ class StateForTest(State):
         messages,
         use_flexible_toolcall=True,
         tool_registry=None,
-        use_tools: Optional[List[Dict[str, Any]]] | bool = None,
-        tool_choice: Optional[Union[str, Dict[str, Any]]] = "auto",
     ):
-        super().__init__(use_flexible_toolcall, tool_registry, use_tools, tool_choice)
+        super().__init__(use_flexible_toolcall, tool_registry)
         self._messages = messages
 
     async def accumulate_response(self, response):
