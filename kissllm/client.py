@@ -23,16 +23,6 @@ class State:
         self.use_flexible_toolcall = use_flexible_toolcall
         self.tool_registry = tool_registry
 
-        if self.tool_registry:
-            self.tool_specs = self.tool_registry.get_tools_specs() or None
-        else:
-            self.tool_specs = None
-
-        if not self.tool_specs:
-            self.tool_choice = None
-        else:
-            self.tool_choice = "auto"
-
         self._last_message = None
 
     def last_message(self):
@@ -100,12 +90,35 @@ class State:
             should_cont = True
         return should_cont
 
-    def inject_tools_into_messages(self) -> List[Dict[str, str]]:
+    def get_tool_params(self):
+        if self.use_flexible_toolcall:
+            tools = None
+            tool_choice = None
+        else:
+            if self.tool_registry:
+                tools = self.tool_registry.get_tools_specs() or None
+            else:
+                tools = None
+            tool_choice = 'auto'
+
+        return tools, tool_choice
+
+    def inject_tools_into_messages(self):
         """Inject tools information into messages."""
-        if not self.tool_specs:
-            return self._messages
+        if self.tool_registry:
+            tool_specs = self.tool_registry.get_tools_specs() or None
+        else:
+            tool_specs = None
+
+        if not tool_specs:
+            return
 
         messages = self._messages
+        if any(
+            [m.get("local_metadata", {}).get("type") == "tool_spec" for m in messages]
+        ):
+            return
+
         tools_sys = """
 # Tool Use
 You can call external tools to help complete tasks.
@@ -145,21 +158,32 @@ with "quotes"
 """
 
         tools_user = "\n## Available Tool Specifications:\n" + "\n".join(
-            [self._generate_tool_text(t) for t in self.tool_specs]
+            [self._generate_tool_text(t) for t in tool_specs]
         )
 
         tools_msg = tools_sys + tools_user
 
-        new_messages = messages.copy()
-        for i, msg in enumerate(new_messages):
+        for i, msg in enumerate(messages):
             if msg["role"] == "system":
-                new_messages.insert(i + 1, {"role": "user", "content": tools_msg})
+                messages.insert(
+                    i + 1,
+                    {
+                        "role": "user",
+                        "content": tools_msg,
+                        "local_metadata": {"type": "tool_spec"},
+                    },
+                )
                 break
         else:
             # If no system message found, insert tools text
-            new_messages.insert(0, {"role": "user", "content": tools_msg})
-
-        return new_messages
+            messages.insert(
+                0,
+                {
+                    "role": "user",
+                    "content": tools_msg,
+                    "local_metadata": {"type": "tool_spec"},
+                },
+            )
 
     def _generate_tool_text(self, tool_spec) -> str:
         func = tool_spec["function"]
@@ -276,13 +300,7 @@ class LLMClient:
         """Execute LLM completion with automatic tool execution until no more tool calls"""
         # Use registered tools from the client's registry if tools parameter is True
         step = 0
-
-        if state.use_flexible_toolcall:
-            tools = None
-            tool_choice = None
-        else:
-            tools = state.tool_specs
-            tool_choice = state.tool_choice
+        tools, tool_choice = state.get_tool_params()
 
         while step < max_steps:
             step += 1
