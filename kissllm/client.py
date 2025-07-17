@@ -99,7 +99,7 @@ class State:
                 tools = self.tool_registry.get_tools_specs() or None
             else:
                 tools = None
-            tool_choice = 'auto'
+            tool_choice = "auto"
 
         return tools, tool_choice
 
@@ -150,6 +150,10 @@ multiline
 demo value
 with "quotes"
 </raw_tool_argument_1>
+
+## Tool Calling Revoke:
+If you find yourself gives wrong tool call in **this reply earlier**, you can use <revoke_tool_call> to revoke the earlier tool call of **this replay**. For example:
+<revoke_tool_call>tool_call_00001</revoke_tool_call>
 
 ## Tool Calling Rules:
 1. Understand the user's request before calling any tools.

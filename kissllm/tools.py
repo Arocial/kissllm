@@ -262,6 +262,12 @@ class ToolMixin:
             arg_id, arg_value = match.groups()
             raw_args[f"ref:raw_tool_argument_{arg_id}"] = arg_value.strip()
 
+        # Parse revoke tool calls first
+        revoked_ids = set()
+        revoke_pattern = r"^\s*<revoke_tool_call>\s*(\w+)\s*</revoke_tool_call>\s*$"
+        for match in re.finditer(revoke_pattern, content, re.DOTALL | re.MULTILINE):
+            revoked_ids.add(match.group(1).strip())
+
         # Parse tool calls from content using <tool_call> tags
         pattern = r"^\s*<tool_call>\s*(\{.*?\})\s*</tool_call>\s*$"
         matches = re.findall(pattern, content, re.DOTALL | re.MULTILINE)
@@ -269,6 +275,12 @@ class ToolMixin:
         for i, match in enumerate(matches):
             try:
                 tool_call_data = json.loads(match.strip())
+                call_id = tool_call_data.get("id")
+
+                # Skip revoked tool calls
+                if call_id in revoked_ids:
+                    logger.debug(f"Skipping revoked tool call: {call_id}")
+                    continue
 
                 # Process arguments to replace any raw references
                 arguments = tool_call_data.get("arguments", {})
@@ -279,7 +291,7 @@ class ToolMixin:
 
                 tool_calls.append(
                     {
-                        "id": tool_call_data.get("id"),
+                        "id": call_id,
                         "type": "function",
                         "function": {
                             "name": tool_call_data.get("name"),
