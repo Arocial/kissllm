@@ -129,7 +129,8 @@ class LocalToolManager:
         func = self._get_tool_function(name)
         if not func:
             raise ValueError(f"Local tool function '{name}' not found")
-        logger.debug(f"Executing local tool: {name} with args: {args}")
+        logger.info(f"Executing local tool: {name}")
+        logger.debug(f"Tool call args: {args}")
         if asyncio.iscoroutinefunction(func):
             return await func(**args)
         else:
@@ -276,10 +277,11 @@ class ToolMixin:
             try:
                 tool_call_data = json.loads(match.strip())
                 call_id = tool_call_data.get("id")
+                logger.info(f"Parsing tool call: {call_id}")
 
                 # Skip revoked tool calls
                 if call_id in revoked_ids:
-                    logger.debug(f"Skipping revoked tool call: {call_id}")
+                    logger.info(f"Skipping revoked tool call: {call_id}")
                     continue
 
                 # Process arguments to replace any raw references
