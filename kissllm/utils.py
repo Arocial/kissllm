@@ -1,5 +1,4 @@
 import json
-import logging
 import os
 
 import yaml
@@ -18,7 +17,7 @@ def get_from_env(env: str, default=None) -> str | None:
     return os.environ.get(env.upper(), default)
 
 
-class PrettyDumper(yaml.Dumper):
+class PrettyYamlDumper(yaml.Dumper):
     """Custom YAML dumper for improved readability."""
 
     pass
@@ -40,25 +39,10 @@ def literal_presenter(dumper, data):
         return dumper.represent_scalar("tag:yaml.org,2002:str", data)
 
 
-PrettyDumper.add_representer(str, literal_presenter)
+PrettyYamlDumper.add_representer(str, literal_presenter)
 
 
-def logging_prompt(logger: logging.Logger, *messages):
-    """Log messages with a custom log level for prompts.
-
-    The log level is determined by the PROMPT_LOG_LEVEL environment variable.
-    If not set, defaults to a level of 100 (custom level).
-
-    Args:
-        logger: The logger instance to use.
-        *messages: Messages to log, formatted as YAML for readability.
-    """
-
-    if not hasattr(logging_prompt, "_PROMPT_LOG_LEVEL"):
-        logging_prompt._PROMPT_LOG_LEVEL = logging.getLevelNamesMapping().get(
-            (get_from_env("PROMPT_LOG_LEVEL") or "").upper(), 100
-        )
-
+def format_prompt(messages):
     def recursive_convert(obj):
         if isinstance(obj, dict):
             return {k: recursive_convert(v) for k, v in obj.items()}
@@ -73,13 +57,12 @@ def logging_prompt(logger: logging.Logger, *messages):
         else:
             return obj
 
-    for message in messages:
-        logger.log(
-            logging_prompt._PROMPT_LOG_LEVEL,
-            yaml.dump(
-                recursive_convert(message),
-                allow_unicode=True,
-                default_flow_style=False,
-                Dumper=PrettyDumper,
-            ),
+    return [
+        yaml.dump(
+            recursive_convert(message),
+            allow_unicode=True,
+            default_flow_style=False,
+            Dumper=PrettyYamlDumper,
         )
+        for message in messages
+    ]
