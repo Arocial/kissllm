@@ -4,11 +4,12 @@ from typing import Any, Dict, List, Optional, Union
 
 from openai.types.completion import Completion
 
+from kissllm.io import IOChannel, IOTypeEnum
 from kissllm.observation.decorators import observe
 from kissllm.providers import get_provider_driver
 from kissllm.stream import CompletionStream
 from kissllm.tools import ToolManager, ToolMixin
-from kissllm.utils import logging_prompt
+from kissllm.utils import format_prompt
 
 logger = logging.getLogger(__name__)
 
@@ -227,6 +228,7 @@ class LLMClient:
         provider_model: str | None = None,
         api_key: str | None = None,
         base_url: str | None = None,
+        io_channel: IOChannel | None = None,
     ):
         """
         Initialize LLM client with specific provider.
@@ -249,6 +251,7 @@ class LLMClient:
         self.provider_driver = get_provider_driver(self.provider)(
             self.provider, api_key=api_key, base_url=base_url
         )
+        self.io_channel = io_channel
 
     def get_model(self, model):
         if model is None:
@@ -278,7 +281,15 @@ class LLMClient:
         for msg in final_messages:
             msg.pop("local_metadata", None)
 
-        logging_prompt(logger, "===Raw Prompt Messages:===", final_messages)
+        if self.io_channel:
+            channel = self.io_channel.create_sub_channel(IOTypeEnum.prompt_message)
+            await channel.write(
+                content=final_messages,
+            )
+
+        logger.debug("===Raw Prompt Messages:===")
+        logger.debug(format_prompt(final_messages))
+
         res = await self.provider_driver.async_completion(
             messages=final_messages,
             model=model,
