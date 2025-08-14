@@ -138,7 +138,7 @@ You can call external tools to help complete tasks.
 2. Generate a unique ID for each call.
 3. Follow the exact schema and provide all required parameters.
 4. Each <tool_call> must start on a new line.
-5. For long string, you can use `ref:raw_tool_argument_<index>` to reference raw text in message.
+5. For long strings, use `ref:raw_tool_argument_<index>` to reference raw text in the message. The `<index>` must be unique within a single reply.
 For example:
 
 <tool_call>{"id": "tool_call_00001", "name": "demo_func_name", "arguments": {"demo_arg": "multiline\ndemo_value\nwith \"quotes\""}}</tool_call>
