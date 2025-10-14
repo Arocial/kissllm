@@ -31,8 +31,9 @@ def create_simple_mcp_server():
 # --- MCP Aggregator Server Definition ---
 def create_aggregator_mcp_server():
     """Creates and returns an MCPAggregatorServer instance."""
-    from kissllm.mcp import StdioMCPConfig
     from kissllm.mcp.aggregator import MCPAggregatorServer
+
+    from kissllm.mcp import StdioMCPConfig
 
     # Backend configs point back to this script, running in 'simple stdio' mode
     # Add unique names for each backend

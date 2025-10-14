@@ -165,10 +165,10 @@ class ToolManager:
         if self.mcp_manager:
             await self.mcp_manager.unregister_all()
 
-    def get_tools_specs(self) -> List[Dict[str, Any]]:
+    async def get_tools_specs(self) -> List[Dict[str, Any]]:
         """Get all registered tool specifications (local and MCP)."""
         local_specs = self.local_manager.get_tools_specs() if self.local_manager else []
-        mcp_specs = self.mcp_manager.get_tool_specs() if self.mcp_manager else []
+        mcp_specs = await self.mcp_manager.get_tool_specs() if self.mcp_manager else []
         return local_specs + mcp_specs
 
     async def execute_tool_call(self, tool_call: Dict[str, Any]) -> Any:
