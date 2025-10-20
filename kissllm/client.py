@@ -91,23 +91,23 @@ class State:
             should_cont = True
         return should_cont
 
-    def get_tool_params(self):
+    async def get_tool_params(self):
         if self.use_flexible_toolcall:
             tools = None
             tool_choice = None
         else:
             if self.tool_registry:
-                tools = self.tool_registry.get_tools_specs() or None
+                tools = await self.tool_registry.get_tool_specs() or None
             else:
                 tools = None
             tool_choice = "auto"
 
         return tools, tool_choice
 
-    def inject_tools_into_messages(self):
+    async def inject_tools_into_messages(self):
         """Inject tools information into messages."""
         if self.tool_registry:
-            tool_specs = self.tool_registry.get_tools_specs() or None
+            tool_specs = await self.tool_registry.get_tool_specs() or None
         else:
             tool_specs = None
 
@@ -315,7 +315,7 @@ class LLMClient:
         """Execute LLM completion with automatic tool execution until no more tool calls"""
         # Use registered tools from the client's registry if tools parameter is True
         step = 0
-        tools, tool_choice = state.get_tool_params()
+        tools, tool_choice = await state.get_tool_params()
 
         while step < max_steps:
             step += 1

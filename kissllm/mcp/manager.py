@@ -47,7 +47,7 @@ class MCPConnection:
         name = self.config.name
         await self.cleanup()
         logger.info(
-            f"Attempting to connect to MCP server '{name}' using {self.config.type} transport."
+            f"Attempting to connect to MCP server '{name}' using {self.config.transport_type} transport."
         )
         self.exit_stack = AsyncExitStack()
 

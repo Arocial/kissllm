@@ -52,7 +52,7 @@ class LocalToolManager:
             return decorator
         return decorator(func)
 
-    def get_tools_specs(self) -> List[Dict[str, Any]]:
+    def get_tool_specs(self) -> List[Dict[str, Any]]:
         """Get all registered local tool specifications."""
         return [tool["spec"] for tool in self._tools.values()]
 
@@ -165,9 +165,9 @@ class ToolManager:
         if self.mcp_manager:
             await self.mcp_manager.unregister_all()
 
-    async def get_tools_specs(self) -> List[Dict[str, Any]]:
+    async def get_tool_specs(self) -> List[Dict[str, Any]]:
         """Get all registered tool specifications (local and MCP)."""
-        local_specs = self.local_manager.get_tools_specs() if self.local_manager else []
+        local_specs = self.local_manager.get_tool_specs() if self.local_manager else []
         mcp_specs = await self.mcp_manager.get_tool_specs() if self.mcp_manager else []
         return local_specs + mcp_specs
 

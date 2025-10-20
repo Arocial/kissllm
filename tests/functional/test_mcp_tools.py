@@ -9,7 +9,7 @@ import pytest
 from dotenv import load_dotenv
 
 from kissllm.client import LLMClient
-from kissllm.mcp import SSEMCPConfig, StdioMCPConfig
+from kissllm.mcp import StdioMCPConfig, StreamableHttpMCPConfig
 from kissllm.mcp.manager import MCPManager
 from kissllm.tools import ToolManager
 from tests.functional.helpers import StateForTest
@@ -44,19 +44,18 @@ def mcp_server_path():
 
 
 @pytest.fixture(scope="module")
-def sse_mcp_server(mcp_server_path):
-    """Starts an MCP server with SSE transport in a subprocess."""
+def streamable_http_mcp_server(mcp_server_path):
+    """Starts an MCP server with streamable http transport in a subprocess."""
     port = find_free_port()
     host = "localhost"
     base_url = f"http://{host}:{port}"
-    sse_url = f"{base_url}/sse"
+    mcp_url = f"{base_url}/mcp"
 
-    # Command to run the simple server in SSE mode
+    # Command to run the simple server in Streamable HTTP mode
     cmd = [
         sys.executable,
         mcp_server_path,
-        "simple",
-        "sse",
+        "streamable-http",
         "--port",
         str(port),
         "--host",
@@ -64,7 +63,7 @@ def sse_mcp_server(mcp_server_path):
     ]
 
     # Start the server process
-    print(f"\nStarting SSE MCP server: {' '.join(cmd)}")
+    print(f"\nStarting Streamable http MCP server: {' '.join(cmd)}")
     server_process = subprocess.Popen(
         cmd, stdout=subprocess.PIPE, stderr=subprocess.PIPE
     )
@@ -76,25 +75,24 @@ def sse_mcp_server(mcp_server_path):
     if server_process.poll() is not None:
         stdout, stderr = server_process.communicate()
         pytest.fail(
-            f"SSE MCP server failed to start. Return code: {server_process.returncode}\n"
+            f"Streamable HTTP MCP server failed to start. Return code: {server_process.returncode}\n"
             f"Stdout:\n{stdout.decode()}\nStderr:\n{stderr.decode()}"
         )
 
-    print(f"SSE MCP server running at {sse_url}")
-    yield sse_url
+    print(f"Streamable HTTP MCP server running at {mcp_url}")
+    yield mcp_url
 
     # Cleanup: terminate the server process
-    print(f"\nStopping SSE MCP server (PID: {server_process.pid})...")
+    print(f"\nStopping Streamable HTTP MCP server (PID: {server_process.pid})...")
     server_process.terminate()
     try:
         server_process.wait(timeout=5)  # Wait for graceful termination
-        print("SSE MCP server stopped.")
+        print("Streamable HTTP MCP server stopped.")
     except subprocess.TimeoutExpired:
         print("Server did not terminate gracefully, killing...")
         server_process.kill()
         server_process.wait()
-        print("SSE MCP server killed.")
-
+        print("Streamable HTTP MCP server killed.")
 
 
 @pytest.fixture(scope="function")
@@ -137,7 +135,7 @@ async def test_mcp_stdio_tools(mcp_server_path):
     config = StdioMCPConfig(
         name=server_name,
         command=sys.executable,
-        args=[mcp_server_path, "simple", "stdio"],
+        args=[mcp_server_path, "stdio"],
     )
 
     # Create MCPManager with the config
@@ -167,11 +165,11 @@ async def test_mcp_stdio_tools(mcp_server_path):
 
 
 @pytest.mark.asyncio
-async def test_mcp_sse_tools(sse_mcp_server):
-    """Test MCP tools functionality using SSE transport."""
-    sse_url = sse_mcp_server
-    server_name = "test_sse_server"
-    config = SSEMCPConfig(name=server_name, url=sse_url)
+async def test_mcp_http_tools(streamable_http_mcp_server):
+    """Test MCP tools functionality using Streamable HTTP transport."""
+    mcp_url = streamable_http_mcp_server
+    server_name = "test_streamable_http_server"
+    config = StreamableHttpMCPConfig(name=server_name, url=mcp_url)
 
     # Create MCPManager with the config
     mcp_manager = MCPManager(mcp_configs=[config])
@@ -185,7 +183,7 @@ async def test_mcp_sse_tools(sse_mcp_server):
         registered_tool_names = [
             spec["function"]["name"] for spec in registered_tool_specs
         ]
-        print(f"Registered tools (sse): {registered_tool_names}")
+        print(f"Registered tools (streamable http): {registered_tool_names}")
         assert f"{server_name}_add" in registered_tool_names
         assert f"{server_name}_multiply" in registered_tool_names
 
@@ -194,5 +192,3 @@ async def test_mcp_sse_tools(sse_mcp_server):
 
         # Perform the actual LLM interaction test
         await _perform_mcp_tool_test(client, tool_manager)
-
-    # No explicit unregister needed

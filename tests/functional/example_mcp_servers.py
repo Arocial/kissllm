@@ -28,68 +28,32 @@ def create_simple_mcp_server():
     return mcp
 
 
-# --- MCP Aggregator Server Definition ---
-def create_aggregator_mcp_server():
-    """Creates and returns an MCPAggregatorServer instance."""
-    from kissllm.mcp.aggregator import MCPAggregatorServer
-
-    from kissllm.mcp import StdioMCPConfig
-
-    # Backend configs point back to this script, running in 'simple stdio' mode
-    # Add unique names for each backend
-    backend_configs = [
-        StdioMCPConfig(
-            name="backend_0",
-            command=sys.executable,
-            args=[SCRIPT_PATH, "simple", "stdio"],
-        ),
-        StdioMCPConfig(
-            name="backend_1",
-            command=sys.executable,
-            args=[SCRIPT_PATH, "simple", "stdio"],
-        ),
-    ]
-
-    aggregator = MCPAggregatorServer(
-        backend_configs=backend_configs,
-        name="TestAggregatorServer",
-    )
-    return aggregator
-
-
 # --- Main Execution Logic ---
 if __name__ == "__main__":
     parser = argparse.ArgumentParser(description="Run Example MCP Servers for Testing")
     parser.add_argument(
-        "server_type", choices=["simple", "aggregator"], help="Type of server to run"
+        "mode",
+        choices=["stdio", "streamable-http"],
+        help="Transport mode (stdio or streamable http)",
     )
     parser.add_argument(
-        "mode", choices=["stdio", "sse"], help="Transport mode (stdio or sse)"
+        "--port", type=int, help="Port number for streamable http mode", default=None
     )
     parser.add_argument(
-        "--port", type=int, help="Port number for SSE mode", default=None
-    )
-    parser.add_argument(
-        "--host", type=str, help="Host for SSE mode", default="localhost"
+        "--host", type=str, help="Host for streamable http mode", default="localhost"
     )
 
     args = parser.parse_args()
 
     server = None
-    if args.server_type == "simple":
-        server = create_simple_mcp_server()
-        print(f"Starting Simple MCP Server in {args.mode} mode...")
-    elif args.server_type == "aggregator":
-        server = create_aggregator_mcp_server()
-        print(f"Starting MCP Aggregator Server in {args.mode} mode...")
+    server = create_simple_mcp_server()
+    print(f"Starting Simple MCP Server in {args.mode} mode...")
 
     if server:
-        if args.mode == "sse" and args.port is not None:
+        if args.mode == "streamable-http" and args.port is not None:
             server.settings.port = args.port
             server.settings.host = args.host
-            print(f"SSE configured for {server.settings.host}:{server.settings.port}")
 
-        # Run the selected server
         server.run(args.mode)
     else:
         print(f"Error: Unknown server type '{args.server_type}'", file=sys.stderr)
